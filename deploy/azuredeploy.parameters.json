@@ -1,0 +1,18 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageAccountNamePrefix": {
+      "value": "storage"
+    },
+    "storageAccountType": {
+      "value": "Standard_LRS"
+    },
+    "virtualMachineName": {
+      "value": "ubuntu001"
+    },
+    "virtualMachinePublicIpDnsNamePrefix": {
+      "value": "ubuntu"
+    }
+  }
+}

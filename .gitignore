@@ -1,0 +1,6 @@
+﻿/.vs/
+/**/bin/
+/**/obj/
+*.user
+*.exe
+/deploy/log.txt

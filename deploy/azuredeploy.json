@@ -1,0 +1,218 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageAccountNamePrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "Unique DNS Name for the Storage Account where the Virtual Machine's disks will be placed."
+      }
+    },
+    "storageAccountType": {
+      "type": "string",
+      "metadata": {
+        "description": "Unique DNS Name for the Storage Account where the Virtual Machine's disks will be placed."
+      }
+    },
+    "virtualMachineName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "adminUsername": {
+      "type": "string",
+      "minLength": 1
+    },
+    "virtualMachinePublicIpDnsNamePrefix": {
+      "type": "string",
+      "minLength": 1
+    },
+    "adminPassword": {
+      "type": "securestring"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[concat(parameters('storageAccountNamePrefix'), uniqueString(resourceGroup().id))]",
+      "apiVersion": "2015-06-15",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "accountType": "[parameters('storageAccountType')]"
+      }
+    },
+    {
+      "name": "virtualNetwork",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "virtualNetwork"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('virtualNetworkPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('virtualNetworkSubnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('virtualNetworkSubnet1Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('virtualMachineName'),'/', variables('extensionName'))]",
+      "apiVersion": "2015-06-15",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/', parameters('virtualMachineName'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Azure.Extensions",
+        "type": "DockerExtension",
+        "typeHandlerVersion": "1.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {}
+      }
+    },
+    {
+      "name": "[variables('virtualMachineNicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', 'virtualNetwork')]",
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('virtualMachinePublicIpName'))]"
+      ],
+      "tags": {
+        "displayName": "virtualMachineNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('virtualMachineSubnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('virtualMachinePublicIpName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('virtualMachineName')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[concat('Microsoft.Storage/storageAccounts/', concat(parameters('storageAccountNamePrefix'), uniqueString(resourceGroup().id)))]",
+        "[concat('Microsoft.Network/networkInterfaces/', variables('virtualMachineNicName'))]"
+      ],
+      "tags": {
+        "displayName": "virtualMachine"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('virtualMachineVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('virtualMachineName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('virtualMachineImagePublisher')]",
+            "offer": "[variables('virtualMachineImageOffer')]",
+            "sku": "[variables('virtualMachineSku')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "virtualMachineOSDisk",
+            "vhd": {
+              "uri": "[concat('http://', concat(parameters('storageAccountNamePrefix'), uniqueString(resourceGroup().id)), '.blob.core.windows.net/', variables('virtualMachineStorageAccountContainerName'), '/', variables('virtualMachineOSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('virtualMachineNicName'))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "[variables('virtualMachinePublicIpName')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "virtualMachinePublicIp"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[concat(parameters('virtualMachinePublicIpDnsNamePrefix'), uniqueString(resourceGroup().id))]"
+        }
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('virtualMachineName'),'/enablevmaccess')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/', parameters('virtualMachineName'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.OSTCExtensions",
+        "type": "VMAccessForLinux",
+        "typeHandlerVersion": "1.4",
+        "autoUpgradeMinorVersion": "true",
+        "settings": {},
+        "protectedSettings": {
+          "username": "[parameters('adminUsername')]",
+          "password": "[parameters('adminPassword')]"
+        }
+      }
+    }
+  ],
+  "variables": {
+    "virtualNetworkPrefix": "10.0.0.0/16",
+    "virtualNetworkSubnet1Name": "Subnet-1",
+    "virtualNetworkSubnet1Prefix": "10.0.0.0/24",
+    "virtualMachineImagePublisher": "Canonical",
+    "virtualMachineImageOffer": "UbuntuServer",
+    "virtualMachineOSDiskName": "virtualMachineOSDisk",
+    "virtualMachineSku": "16.04.0-LTS",
+    "virtualMachineVmSize": "Standard_D1",
+    "virtualMachineVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'virtualNetwork')]",
+    "virtualMachineSubnetRef": "[concat(variables('virtualMachineVnetID'), '/subnets/', variables('virtualNetworkSubnet1Name'))]",
+    "virtualMachineStorageAccountContainerName": "vhds",
+    "virtualMachineNicName": "[concat(parameters('virtualMachineName'), 'NetworkInterface')]",
+    "extensionName": "DockerExtension",
+    "virtualMachinePublicIpName": "virtualMachinePublicIp"
+  },
+  "outputs": {
+    "fqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('virtualMachinePublicIpName'))).dnsSettings.fqdn]"
+    }
+  }
+}
